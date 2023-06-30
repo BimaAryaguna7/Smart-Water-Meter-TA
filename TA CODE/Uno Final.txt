@@ -1,0 +1,85 @@
+#include <LiquidCrystal_I2C.h>
+
+LiquidCrystal_I2C lcd(0x27, 20,4);
+#define FLOWSENSORPIN 2
+
+volatile uint16_t pulses = 0;
+volatile uint8_t lastflowpinstate;
+volatile uint32_t lastflowratetimer = 0;
+volatile float flowrate;
+float liters = pulses;
+const float duit = 2000;
+float price;
+
+SIGNAL(TIMER0_COMPA_vect) {
+  uint8_t x = digitalRead(FLOWSENSORPIN);
+  if (x == lastflowpinstate) {
+    lastflowratetimer++;
+    return; // nothing changed!
+  }
+  if (x == HIGH) {
+    pulses++; // low to high transition!
+  }
+  lastflowpinstate = x;
+  flowrate = 1000.0;
+  flowrate /= lastflowratetimer; // in hertz
+  lastflowratetimer = 0;
+}
+
+void useInterrupt(boolean v) {
+  if (v) {
+    OCR0A = 0xAF;
+    TIMSK0 |= _BV(OCIE0A);
+  } else {
+    TIMSK0 &= ~_BV(OCIE0A);
+    pulses = 0; // Reset pulses count
+  }
+}
+
+void setup() {
+  Serial.begin(9600);
+  lcd.begin();
+  lcd.print("Rincian");
+  pinMode(FLOWSENSORPIN, INPUT);
+  digitalWrite(FLOWSENSORPIN, HIGH);
+  lastflowpinstate = digitalRead(FLOWSENSORPIN);
+  useInterrupt(true);
+}
+
+void loop() {
+  liters = pulses / 7.5;
+  liters /= 60.0;
+  price = liters * duit;
+ 
+
+  String req = "";
+  while (Serial.available() > 0) {
+    req += char(Serial.read());
+  }
+
+  req.trim();
+  if (req == "ya") {
+    kirimdata();
+    PrintLCD();
+  }
+
+  req = "";
+  delay(1000);
+}
+
+void kirimdata() {
+  String datakirim = String(liters) + "#" + String(price);
+  Serial.println(datakirim);
+  delay(1000);
+}
+void PrintLCD(){
+  lcd.clear(); // Bersihkan tampilan LCD
+  lcd.setCursor(0, 0); // Atur kursor pada baris 1, kolom 1
+  lcd.print("Air Terkirim");
+  lcd.setCursor(0, 1); // Atur kursor pada baris 2, kolom 1
+  lcd.print("Liters: " + String(liters));
+  lcd.setCursor(0, 2); // Atur kursor pada baris 3, kolom 1
+  lcd.print("Price: " + String(price));
+
+  delay(3000); // Tampilkan data selama 3 detik
+}
